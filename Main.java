@@ -159,8 +159,6 @@ class MemoryGame {
 }
 
 
-
-
 // The method that acts as the controller
 // Makes the model and view connect
 class GameController {
@@ -244,7 +242,6 @@ class GameController {
         scanner.close();
     }
 }
-
 
 // The method that acts as a view
 // GUI and terminal output
