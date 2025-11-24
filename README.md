@@ -9,3 +9,7 @@ business logic, such as the number of seconds that have passed, matches that wer
 made, etc. These are further used by the controller class to update the game.
 There are also getter methods in the MemoryGame class for the controller class
 to use.
+
+
+Btw I removed most of the files in the source code cuz a lot of them were exclusive
+to the repository the source code is from. The game runs fine without them
