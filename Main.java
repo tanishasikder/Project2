@@ -10,10 +10,10 @@ import java.util.TimerTask;
 
 GUI in the GameOutput class
 
-Point system in the MemoryGame clas
+Point system in the MemoryGame class
 
 Use the GameController class to call the methods from the
-point system*/
+point system and the GUI*/
 
 
 // Method for the model
