@@ -21,10 +21,14 @@ point system and the GUI*/
 class Tile {
     private char symbol;
     private boolean flipped;
+    // NEW: Variable to track if a card has been revealed before (Required for point system)
+    private boolean seen; 
 
     public Tile(char symbol) {
         this.symbol = symbol;
         this.flipped = false;
+        // NEW: Initialize seen as false
+        this.seen = false; 
     }
 
     public char getSymbol() { return symbol; }
@@ -32,6 +36,12 @@ class Tile {
     public boolean isFlipped() { return flipped; }
 
     public void setFlipped(boolean flipped) { this.flipped = flipped; }
+
+    // NEW: Getter for the seen status
+    public boolean isSeen() { return seen; }
+
+    // NEW: Setter for the seen status
+    public void setSeen(boolean seen) { this.seen = seen; }
 }
 
 // Another method for the model
@@ -153,7 +163,8 @@ class MemoryGame {
     public void updateFlips() { flipsRemaining = flipsRemaining - 1; }
 
     // Method to help the controller update the model of the current score
-    public void updateScore() { playerScore = playerScore + 1; }
+    // MODIFIED: Changed signature to accept specific point values (positive or negative)
+    public void updateScore(int points) { playerScore = playerScore + points; }
 
     // Method to get the matches from the model
     public int getMatches() { return matchesFound; }
@@ -242,11 +253,52 @@ class GameController {
                 memory.updateFlips();
                 // If a match is found, matchesFound and playerScore increases
                 if (memory.checkForMatch(tile)) {
-                    output.show("Match found!");
+                    output.show("Match found! (+10 Points)"); // NEW: Updated message
                     memory.updateMatches();
-                    memory.updateScore();
+                    
+                    // MODIFIED: Add 10 points for a match instead of 1
+                    memory.updateScore(10); 
+                    
+                    // NEW: Loop through tiles to mark matched ones as "seen"
+                    for (Tile t : memory.getTiles()) {
+                        if (t.isFlipped()) {
+                            t.setSeen(true);
+                        }
+                    }
+
                 } else if (memory.getFlips() == 0) {
-                    output.show("No match. Out of flips. Next turn.");
+                    
+                    // NEW: Logic to check for penalties before resetting tiles
+                    // Identify the cards involved in this turn
+                    List<Tile> currentTurnTiles = new ArrayList<>();
+                    for (Tile t : memory.getTiles()) {
+                        if (t.isFlipped()) {
+                            currentTurnTiles.add(t);
+                        }
+                    }
+                    
+                    // NEW: Check if any of these cards were seen before
+                    boolean penalty = false;
+                    for (Tile t : currentTurnTiles) {
+                        // If it's seen AND it's not the one we just flipped (unless we flipped the same one twice, which is prevented elsewhere)
+                        // Actually simplified: If it's seen, we should have remembered it.
+                        if (t.isSeen()) {
+                            penalty = true;
+                        }
+                    }
+
+                    if (penalty) {
+                        output.show("No match. You saw this card before! (-2 Points). Next turn.");
+                        memory.updateScore(-2); // NEW: Deduct points
+                    } else {
+                        output.show("No match. Out of flips. Next turn.");
+                    }
+
+                    // NEW: Mark these cards as seen now that they have been revealed
+                    for (Tile t : currentTurnTiles) {
+                        t.setSeen(true);
+                    }
+
                     memory.resetFlippedTiles(); // Reset the flips remaining for the next turn
                 } else {
                     output.show("No match. Try again.");
@@ -303,18 +355,10 @@ class GameOutput {
 public class Main {
     public static void main(String[] args) {
         MemoryGame game = new MemoryGame();
-        game.initializeTiles(6); // Change the number of pairs as per your preference
+        game.initializeTiles(6); // Change the number of pairs as per preference
         GameController controller = new GameController(game);
         controller.play();
     }
 }
-
-
-
-
-
-
-
-
 
 
