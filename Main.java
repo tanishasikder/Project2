@@ -1,9 +1,14 @@
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Scanner;
 import java.util.Timer;
 import java.util.TimerTask;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 
 
 /* TO DO
@@ -23,6 +28,8 @@ class Tile {
     private boolean flipped;
     // NEW: Variable to track if a card has been revealed before (Required for point system)
     private boolean seen; 
+    // NEW: Variable to track if card has been matched
+    private boolean matched;
 
     public Tile(char symbol) {
         this.symbol = symbol;
@@ -42,6 +49,12 @@ class Tile {
 
     // NEW: Setter for the seen status
     public void setSeen(boolean seen) { this.seen = seen; }
+
+    // NEW: Getter for matched status
+    public boolean isMatched() { return matched; }
+
+    // NEW: Setter for matched status
+    public void setMatched(boolean matched) { this.matched = matched; }
 }
 
 // Another method for the model
@@ -84,13 +97,15 @@ class MemoryGame {
         return count == 2;
     }
 
-    public void resetFlippedTiles() {
-        for (Tile tile : tiles) {
-            if (tile.isFlipped()) {
-                tile.setFlipped(false);
-            }
+public void resetFlippedTiles() {
+    for (Tile tile : tiles) {
+        // only flip back tiles that are NOT permanently matched
+        if (tile.isFlipped() && !tile.isMatched()) {
+            tile.setFlipped(false);
         }
     }
+}
+
 
     // Flips the tile when controller calls it
     public void flipTile(Tile tile) {
@@ -323,7 +338,7 @@ class GameController {
 // The method that acts as a view
 // GUI and terminal output
 class GameOutput {
-    // View portion. This is the written view. Needs a GUI view
+    // View portion. This is the written view
     public void displayBoard(List<Tile> tiles) {
         System.out.println("\n------- Memory Game -------");
         System.out.print("   ");
@@ -352,12 +367,222 @@ class GameOutput {
     }
 }
 
+// GUI View
+class GameGUI extends JFrame {
+
+    private final MemoryGame memory;
+    private final java.util.List<JButton> buttons = new ArrayList<>();
+
+    private JLabel scoreLabel;
+    private JLabel timeLabel;
+    private JLabel messageLabel;
+
+    private int firstIndex = -1;
+    private int secondIndex = -1;
+    private boolean processingTurn = false;
+
+    private javax.swing.Timer swingTimer;
+
+    public GameGUI(MemoryGame memory) {
+        this.memory = memory;
+        memory.startTimer();
+        set();
+        startTime();
+    }
+
+    private void set() {
+        setTitle("Memory Game - GUI");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(800, 500);
+        setLocationRelativeTo(null);
+        setLayout(new BorderLayout());
+
+        // score and time show on top panel
+        JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        scoreLabel = new JLabel("Score: " + memory.getScore());
+        timeLabel = new JLabel("Time: " + memory.getSeconds() + " / " + memory.getGameDuration());
+        top.add(scoreLabel);
+        top.add(Box.createHorizontalStrut(20));
+        top.add(timeLabel);
+
+        add(top, BorderLayout.NORTH);
+
+        // cards grid
+        JPanel grid = new JPanel();
+
+        int totalTiles = memory.getTiles().size();
+        int cols = 6; 
+        int rows = (int) Math.ceil(totalTiles / (double) cols);
+
+        grid.setLayout(new GridLayout(rows, cols, 10, 10));
+
+        for (int i = 0; i < totalTiles; i++) {
+            JButton btn = new JButton("?");
+            final int index = i;
+
+            btn.addActionListener(new ActionListener() {
+                @Override
+                public void actionPerformed(ActionEvent e) {
+                    tileTurn(index);
+                }
+            });
+
+            buttons.add(btn);
+            grid.add(btn);
+        }
+
+        add(grid, BorderLayout.CENTER);
+
+        // bottom panel of message and restart button
+        JPanel bottomPanel = new JPanel(new BorderLayout());
+        messageLabel = new JLabel("Find all the pairs!", SwingConstants.CENTER);
+        bottomPanel.add(messageLabel, BorderLayout.CENTER);
+
+        JButton restartButton = new JButton("Restart");
+        restartButton.addActionListener(e -> restartGame());
+        bottomPanel.add(restartButton, BorderLayout.EAST);
+
+        add(bottomPanel, BorderLayout.SOUTH);
+    }
+
+    private void startTime() {
+        swingTimer = new javax.swing.Timer(500, e -> {
+            timeLabel.setText("Time: " + memory.getSeconds() + " / " + memory.getGameDuration());
+            scoreLabel.setText("Score: " + memory.getScore());
+            if (memory.timeIsFinished()) {
+                messageLabel.setText("Time's up! Game over.");
+                disableButtons();
+                swingTimer.stop();
+            }
+        });
+        swingTimer.start();
+    }
+
+    private void tileTurn(int index) {
+        if (processingTurn || memory.timeIsFinished()) return;
+        Tile tile = memory.getTileFromTiles(index);
+        if (tile.isFlipped()) {
+            messageLabel.setText("Tile already flipped.");
+            return;
+        }
+        memory.flipTile(tile);
+        memory.updateFlips();
+        buttons.get(index).setText(String.valueOf(tile.getSymbol()));
+        if (firstIndex == -1) 
+            firstIndex = index;
+        else if (secondIndex == -1) {
+            secondIndex = index;
+            processingTurn = true;
+            eval();
+        }
+    }
+
+    private void eval() {
+    Tile t1 = memory.getTileFromTiles(firstIndex);
+    Tile t2 = memory.getTileFromTiles(secondIndex);
+
+    if (t1.getSymbol() == t2.getSymbol() && !t1.isMatched() && !t2.isMatched()) {
+        messageLabel.setText("Match found! (+10 Points)");
+        memory.updateMatches();
+        memory.updateScore(10);
+        // mark them as matched
+        t1.setMatched(true);
+        t2.setMatched(true);
+        // mark them as seen
+        t1.setSeen(true);
+        t2.setSeen(true);
+        buttons.get(firstIndex).setEnabled(false);
+        buttons.get(secondIndex).setEnabled(false);
+        resetSelection();
+        // for winning
+        if (memory.getMatches() == memory.getTiles().size() / 2) {
+            messageLabel.setText("You found all the matches!");
+            memory.endGame();
+            disableButtons();
+            if (swingTimer != null) swingTimer.stop();
+            JOptionPane.showMessageDialog(this, "Congratulations!\nFinal score: " + memory.getScore() + "\nTime: " + memory.getSeconds() + " seconds");
+        } else processingTurn = false;
+     } else {
+        java.util.List<Tile> currentTurnTiles = Arrays.asList(t1, t2);
+
+        boolean penalty = false;
+        for (Tile t : currentTurnTiles) {
+            if (t.isSeen()) penalty = true;
+        }
+
+        if (penalty) {
+            messageLabel.setText("No match. You saw this card before! (-2 Points)");
+            memory.updateScore(-2);
+        } else messageLabel.setText("No match. Next turn.");
+
+        for (Tile t : currentTurnTiles) t.setSeen(true);
+
+        javax.swing.Timer flipBackTimer = new javax.swing.Timer(700, e -> {
+            memory.resetFlippedTiles();
+            refreshBoard();
+            resetSelection();
+            processingTurn = false;
+        });
+        flipBackTimer.setRepeats(false);
+        flipBackTimer.start();
+    }
+
+    scoreLabel.setText("Score: " + memory.getScore());
+}
+
+    private void refreshBoard() {
+        for (int i = 0; i < memory.getTiles().size(); i++) {
+            Tile tile = memory.getTileFromTiles(i);
+            JButton btn = buttons.get(i);
+
+            // if flipped then show letter otherwise show ?
+            if (tile.isFlipped()) btn.setText(String.valueOf(tile.getSymbol()));  
+            else {
+                btn.setText("?");
+                btn.setEnabled(true);
+            }
+        }
+    }
+
+    private void resetSelection() {
+        firstIndex = -1;
+        secondIndex = -1;
+    }
+
+    private void disableButtons() {
+        for (JButton btn : buttons) btn.setEnabled(false);
+    }
+
+private void restartGame() {
+    if (swingTimer != null && swingTimer.isRunning()) swingTimer.stop();
+
+    processingTurn = false;
+    firstIndex = -1;
+    secondIndex = -1;
+    memory.restartGame();
+    refreshBoard();
+    scoreLabel.setText("Score: " + memory.getScore());
+    messageLabel.setText("New game");
+    startTime();
+}
+
+}
+
 public class Main {
     public static void main(String[] args) {
-        MemoryGame game = new MemoryGame();
-        game.initializeTiles(6); // Change the number of pairs as per preference
-        GameController controller = new GameController(game);
-        controller.play();
+        // for console
+        // MemoryGame game = new MemoryGame();
+        // game.initializeTiles(6); 
+        // GameController controller = new GameController(game);
+        // controller.play();
+
+        // for GUI
+        SwingUtilities.invokeLater(() -> {
+            MemoryGame game = new MemoryGame();
+            game.initializeTiles(6); 
+            GameGUI gui = new GameGUI(game);
+            gui.setVisible(true);
+        });
     }
 }
 
