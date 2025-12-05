@@ -10,25 +10,14 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 
-
-/* TO DO
-
-GUI in the GameOutput class
-
-Point system in the MemoryGame class
-
-Use the GameController class to call the methods from the
-point system and the GUI*/
-
-
 // Method for the model
 // Defines the tile class to be used in the game
 class Tile {
     private char symbol;
+     // NEW: Variable to track if a card has been revealed before (Required for point system)
     private boolean flipped;
-    // NEW: Variable to track if a card has been revealed before (Required for point system)
-    private boolean seen; 
-    // NEW: Variable to track if card has been matched
+    private boolean seen;
+    // NEW: Variable to track if card has been matched 
     private boolean matched;
 
     public Tile(char symbol) {
@@ -36,23 +25,18 @@ class Tile {
         this.flipped = false;
         // NEW: Initialize seen as false
         this.seen = false; 
+        this.matched = false;
     }
 
     public char getSymbol() { return symbol; }
-
     public boolean isFlipped() { return flipped; }
-
     public void setFlipped(boolean flipped) { this.flipped = flipped; }
-
     // NEW: Getter for the seen status
     public boolean isSeen() { return seen; }
-
     // NEW: Setter for the seen status
     public void setSeen(boolean seen) { this.seen = seen; }
-
     // NEW: Getter for matched status
     public boolean isMatched() { return matched; }
-
     // NEW: Setter for matched status
     public void setMatched(boolean matched) { this.matched = matched; }
 }
@@ -80,6 +64,7 @@ class MemoryGame {
     
     // Initializes tiles in the output
     public void initializeTiles(int pairs) {
+        tiles.clear(); // ensure fresh start
         for (char symbol = 'A'; symbol < 'A' + pairs; symbol++) {
             tiles.add(new Tile(symbol));
             tiles.add(new Tile(symbol));
@@ -97,15 +82,16 @@ class MemoryGame {
         return count == 2;
     }
 
-public void resetFlippedTiles() {
-    for (Tile tile : tiles) {
-        // only flip back tiles that are NOT permanently matched
-        if (tile.isFlipped() && !tile.isMatched()) {
-            tile.setFlipped(false);
+    public void resetFlippedTiles() {
+        for (Tile tile : tiles) {
+            // only flip back tiles that are NOT permanently matched
+            if (tile.isFlipped() && !tile.isMatched()) {
+                tile.setFlipped(false);
+            }
         }
+        // reset flipsRemaining for next turn
+        flipsRemaining = 2;
     }
-}
-
 
     // Flips the tile when controller calls it
     public void flipTile(Tile tile) {
@@ -113,7 +99,6 @@ public void resetFlippedTiles() {
     }
 
     public void restartGame() {
-        // Makes sure old timers are stopped
         if (timer != null) {
             timer.cancel();
             timer = null;
@@ -122,14 +107,19 @@ public void resetFlippedTiles() {
         matchesFound = 0;
         flipsRemaining = 2;
         playerScore = 0;
-        timeFinished = false; // Restarts timeFinished flag
+        timeFinished = false;  // Restarts timeFinished flag
         secondsElapsed = 0;
         initializeTiles(6); // Change the number of pairs as per your preference
         startTimer(); // Starts timer for a new game
     }
 
     public void startTimer() {
-        timer = new Timer(); // Initializes a new timer
+        // ensure any existing timer is canceled first
+        if (timer != null) {
+            timer.cancel();
+            timer = null;
+        }
+        timer = new Timer();
         timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
@@ -147,7 +137,7 @@ public void resetFlippedTiles() {
         return tiles.get(tileIndex);
     }
 
-    // Ends the game by cancelling the timer
+     // Ends the game by cancelling the timer
     public void endGame() {
         if (timer != null) {
             timer.cancel();
@@ -167,9 +157,8 @@ public void resetFlippedTiles() {
             timer = null;
         }
     }
-
     // Method to get tiles from the model
-    public List<Tile> getTiles () { return tiles; }
+    public List<Tile> getTiles() { return tiles; }
 
     // Method to help the controller update the model of how many matches
     public void updateMatches() { matchesFound = matchesFound + 1; }
@@ -177,9 +166,11 @@ public void resetFlippedTiles() {
     // Method to help the controller update the model of how many flips
     public void updateFlips() { flipsRemaining = flipsRemaining - 1; }
 
-    // Method to help the controller update the model of the current score
-    // MODIFIED: Changed signature to accept specific point values (positive or negative)
-    public void updateScore(int points) { playerScore = playerScore + points; }
+    // Adds a negative value to the score
+    public void negativeScore() { playerScore = playerScore - 2; }
+
+    // Adds a positive value to the score
+    public void positiveScore() { playerScore = playerScore + 10; }
 
     // Method to get the matches from the model
     public int getMatches() { return matchesFound; }
@@ -195,150 +186,18 @@ public void resetFlippedTiles() {
 
     // Method to get the game duration from the model
     public int getGameDuration() { return gameDuration; }
-}
 
-// The method that acts as the controller
-// Makes the model and view connect
-class GameController {
-    GameOutput output = new GameOutput(); // Instance of the view class
-    private final MemoryGame memory;
-    Scanner scanner = new Scanner(System.in);
-    // Makes the GameController object with data from MemoryGame (model) class
-    public GameController(MemoryGame memory) {
-        this.memory = memory;                  
-    }
-    
-    public void play() {
-        memory.startTimer();
-
-        while (memory.getMatches() < memory.getTiles().size() / 2) {
-            // If time is up, the game is cancelled
-            if (memory.timeIsFinished()) {
-                output.show("Time's up! Game over.");
-                memory.endGame();
-                return;
-            }
-
-            // Displays board. Calls the tiles from model class
-            output.displayBoard(memory.getTiles());
-            output.show("Enter the tile number to flip, 'q' to quit, or 'r' to restart: ");
-            // Gets user input
-            String input = userInput();
-            // If time is up, the game is cancelled
-            if (memory.timeIsFinished()) {
-                output.show("Time's up! Game over.");
-                memory.endGame();
-                return;
-            }
-
-            if (input.equalsIgnoreCase("q")) {
-                // Calls the view method to display message
-                output.show("Quitting the game. Goodbye!");
-                memory.endGame();
-                memory.cancelTimer();
-                return;
-            // Allows user to restart the game
-            } else if (input.equalsIgnoreCase("r")) {  
-                // Calls the view method to display message
-                output.show("Restarting the game...");
-                memory.restartGame();
-                continue;
-            }
-            int tileIndex;
-            try {
-                tileIndex = Integer.parseInt(input);
-            } catch (NumberFormatException e) {
-                // Calls the view method to display message
-                output.show("Invalid input. Please enter a tile number.");
-                continue;
-            }
-            if (tileIndex < 0 || tileIndex >= memory.getTiles().size()) {
-                // Calls the view method to display message
-                output.show("Invalid tile number. Please enter a valid tile number.");
-                continue;
-            }
-           
-            // Gets specific tile from the model
-            Tile tile = memory.getTileFromTiles(tileIndex);
-            if (tile.isFlipped()) {
-                // Calls the view method to display message
-                output.show("Tile already flipped. Try again.");
-            } else {
-                memory.flipTile(tile);
-                memory.updateFlips();
-                // If a match is found, matchesFound and playerScore increases
-                if (memory.checkForMatch(tile)) {
-                    output.show("Match found! (+10 Points)"); // NEW: Updated message
-                    memory.updateMatches();
-                    
-                    // MODIFIED: Add 10 points for a match instead of 1
-                    memory.updateScore(10); 
-                    
-                    // NEW: Loop through tiles to mark matched ones as "seen"
-                    for (Tile t : memory.getTiles()) {
-                        if (t.isFlipped()) {
-                            t.setSeen(true);
-                        }
-                    }
-
-                } else if (memory.getFlips() == 0) {
-                    
-                    // NEW: Logic to check for penalties before resetting tiles
-                    // Identify the cards involved in this turn
-                    List<Tile> currentTurnTiles = new ArrayList<>();
-                    for (Tile t : memory.getTiles()) {
-                        if (t.isFlipped()) {
-                            currentTurnTiles.add(t);
-                        }
-                    }
-                    
-                    // NEW: Check if any of these cards were seen before
-                    boolean penalty = false;
-                    for (Tile t : currentTurnTiles) {
-                        // If it's seen AND it's not the one we just flipped (unless we flipped the same one twice, which is prevented elsewhere)
-                        // Actually simplified: If it's seen, we should have remembered it.
-                        if (t.isSeen()) {
-                            penalty = true;
-                        }
-                    }
-
-                    if (penalty) {
-                        output.show("No match. You saw this card before! (-2 Points). Next turn.");
-                        memory.updateScore(-2); // NEW: Deduct points
-                    } else {
-                        output.show("No match. Out of flips. Next turn.");
-                    }
-
-                    // NEW: Mark these cards as seen now that they have been revealed
-                    for (Tile t : currentTurnTiles) {
-                        t.setSeen(true);
-                    }
-
-                    memory.resetFlippedTiles(); // Reset the flips remaining for the next turn
-                } else {
-                    output.show("No match. Try again.");
-                }
-            }
+    // Helper in case controller wants to increment seconds 
+    public void incrementSeconds() { 
+        secondsElapsed++;
+        if (secondsElapsed >= gameDuration) {
+            timeFinished = true;
         }
-        // Prints the scores for the users. Calls the model for data
-            output.show("Congratulations! You found all the matches.");
-            output.show("Your final score: " + memory.getScore());
-            output.show("Time elapsed: " + memory.getSeconds() + " seconds");
-            memory.endGame();
-            scanner.close();
-    }
-
-    // Gets user input
-    public String userInput() {
-        String input = scanner.nextLine();
-        return input;
     }
 }
 
-// The method that acts as a view
-// GUI and terminal output
+// Terminal output view
 class GameOutput {
-    // View portion. This is the written view
     public void displayBoard(List<Tile> tiles) {
         System.out.println("\n------- Memory Game -------");
         System.out.print("   ");
@@ -361,187 +220,219 @@ class GameOutput {
         System.out.println("\n---------------------------");
     }
 
-    // For the controller method to print any message
     public void show(String message) {
         System.out.println(message);
     }
 }
 
-// GUI View
+// The second view in this program
 class GameGUI extends JFrame {
-
     private final MemoryGame memory;
     private final java.util.List<JButton> buttons = new ArrayList<>();
+    
+    public JLabel scoreLabel;
+    public JLabel timeLabel;
+    public JLabel messageLabel;
+    public javax.swing.Timer swingTimer;
 
-    private JLabel scoreLabel;
-    private JLabel timeLabel;
-    private JLabel messageLabel;
-
-    private int firstIndex = -1;
-    private int secondIndex = -1;
-    private boolean processingTurn = false;
-
-    private javax.swing.Timer swingTimer;
-
-    public GameGUI(MemoryGame memory) {
+    public GameGUI(MemoryGame memory, GameController controller) {
         this.memory = memory;
-        memory.startTimer();
-        set();
-        startTime();
-    }
-
-    private void set() {
+        
+        // Setting the size, layout, and title
         setTitle("Memory Game - GUI");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(800, 500);
         setLocationRelativeTo(null);
         setLayout(new BorderLayout());
 
-        // score and time show on top panel
+        // Makes the top. Displays the score, seconds, and game duration
         JPanel top = new JPanel(new FlowLayout(FlowLayout.LEFT));
         scoreLabel = new JLabel("Score: " + memory.getScore());
         timeLabel = new JLabel("Time: " + memory.getSeconds() + " / " + memory.getGameDuration());
         top.add(scoreLabel);
         top.add(Box.createHorizontalStrut(20));
         top.add(timeLabel);
-
         add(top, BorderLayout.NORTH);
 
-        // cards grid
+        // Makes the grid for the cards
         JPanel grid = new JPanel();
-
         int totalTiles = memory.getTiles().size();
         int cols = 6; 
         int rows = (int) Math.ceil(totalTiles / (double) cols);
-
         grid.setLayout(new GridLayout(rows, cols, 10, 10));
 
         for (int i = 0; i < totalTiles; i++) {
             JButton btn = new JButton("?");
             final int index = i;
-
             btn.addActionListener(new ActionListener() {
                 @Override
                 public void actionPerformed(ActionEvent e) {
-                    tileTurn(index);
+                    controller.tileTurn(index);
                 }
             });
-
+            // initial enabled state depends on whether tile is matched
+            Tile t = memory.getTiles().get(i);
+            btn.setEnabled(!t.isMatched());
             buttons.add(btn);
             grid.add(btn);
         }
-
         add(grid, BorderLayout.CENTER);
 
-        // bottom panel of message and restart button
+        // The bottom of the JPanel. Allows restarting
         JPanel bottomPanel = new JPanel(new BorderLayout());
         messageLabel = new JLabel("Find all the pairs!", SwingConstants.CENTER);
         bottomPanel.add(messageLabel, BorderLayout.CENTER);
 
         JButton restartButton = new JButton("Restart");
-        restartButton.addActionListener(e -> restartGame());
+        restartButton.addActionListener(e -> controller.restartGame());
         bottomPanel.add(restartButton, BorderLayout.EAST);
 
         add(bottomPanel, BorderLayout.SOUTH);
     }
 
-    private void startTime() {
-        swingTimer = new javax.swing.Timer(500, e -> {
-            timeLabel.setText("Time: " + memory.getSeconds() + " / " + memory.getGameDuration());
-            scoreLabel.setText("Score: " + memory.getScore());
-            if (memory.timeIsFinished()) {
-                messageLabel.setText("Time's up! Game over.");
-                disableButtons();
-                swingTimer.stop();
-            }
-        });
-        swingTimer.start();
-    }
-
-    private void tileTurn(int index) {
-        if (processingTurn || memory.timeIsFinished()) return;
-        Tile tile = memory.getTileFromTiles(index);
-        if (tile.isFlipped()) {
-            messageLabel.setText("Tile already flipped.");
-            return;
-        }
-        memory.flipTile(tile);
-        memory.updateFlips();
-        buttons.get(index).setText(String.valueOf(tile.getSymbol()));
-        if (firstIndex == -1) 
-            firstIndex = index;
-        else if (secondIndex == -1) {
-            secondIndex = index;
-            processingTurn = true;
-            eval();
-        }
-    }
-
-    private void eval() {
-    Tile t1 = memory.getTileFromTiles(firstIndex);
-    Tile t2 = memory.getTileFromTiles(secondIndex);
-
-    if (t1.getSymbol() == t2.getSymbol() && !t1.isMatched() && !t2.isMatched()) {
-        messageLabel.setText("Match found! (+10 Points)");
-        memory.updateMatches();
-        memory.updateScore(10);
-        // mark them as matched
-        t1.setMatched(true);
-        t2.setMatched(true);
-        // mark them as seen
-        t1.setSeen(true);
-        t2.setSeen(true);
-        buttons.get(firstIndex).setEnabled(false);
-        buttons.get(secondIndex).setEnabled(false);
-        resetSelection();
-        // for winning
-        if (memory.getMatches() == memory.getTiles().size() / 2) {
-            messageLabel.setText("You found all the matches!");
-            memory.endGame();
-            disableButtons();
-            if (swingTimer != null) swingTimer.stop();
-            JOptionPane.showMessageDialog(this, "Congratulations!\nFinal score: " + memory.getScore() + "\nTime: " + memory.getSeconds() + " seconds");
-        } else processingTurn = false;
-     } else {
-        java.util.List<Tile> currentTurnTiles = Arrays.asList(t1, t2);
-
-        boolean penalty = false;
-        for (Tile t : currentTurnTiles) {
-            if (t.isSeen()) penalty = true;
-        }
-
-        if (penalty) {
-            messageLabel.setText("No match. You saw this card before! (-2 Points)");
-            memory.updateScore(-2);
-        } else messageLabel.setText("No match. Next turn.");
-
-        for (Tile t : currentTurnTiles) t.setSeen(true);
-
-        javax.swing.Timer flipBackTimer = new javax.swing.Timer(700, e -> {
-            memory.resetFlippedTiles();
-            refreshBoard();
-            resetSelection();
-            processingTurn = false;
-        });
-        flipBackTimer.setRepeats(false);
-        flipBackTimer.start();
-    }
-
-    scoreLabel.setText("Score: " + memory.getScore());
-}
-
-    private void refreshBoard() {
+    public void refreshBoard() {
         for (int i = 0; i < memory.getTiles().size(); i++) {
             Tile tile = memory.getTileFromTiles(i);
             JButton btn = buttons.get(i);
 
-            // if flipped then show letter otherwise show ?
-            if (tile.isFlipped()) btn.setText(String.valueOf(tile.getSymbol()));  
-            else {
+            if (tile.isFlipped()) {
+                btn.setText(String.valueOf(tile.getSymbol()));
+            } else {
                 btn.setText("?");
-                btn.setEnabled(true);
             }
+            // disable button if tile matched otherwise enable it
+            btn.setEnabled(!tile.isMatched());
         }
+    }
+
+    public java.util.List<JButton> getButtons() {
+        return buttons;
+    }
+}
+
+// The method that acts as the controller
+// Makes the model and view connect
+class GameController {
+    private final MemoryGame memory;
+    private GameOutput output; // Instance of the view class
+    private GameGUI gui; // Instance of the second view class
+    private int firstIndex = -1;
+    private int secondIndex = -1;
+    private boolean processingTurn = false;
+    private Scanner scanner;
+
+    public GameController(MemoryGame memory) {
+        this.memory = memory;
+        this.output = new GameOutput();
+        this.scanner = new Scanner(System.in);
+    }
+    
+    // If the user chooses the GUI option this executes
+    public void playGUI() {
+        SwingUtilities.invokeLater(() -> {
+            memory.initializeTiles(6); 
+            gui = new GameGUI(memory, this);
+            gui.refreshBoard();            // ensure buttons reflect tiles at start
+            gui.setVisible(true);
+            memory.startTimer();           // start the model timer
+            startTimer();                  // start GUI swing timer 
+        });
+    }
+
+    // Handles the tile flipping in the GUI
+    public void tileTurn(int index) {
+        if (processingTurn || memory.timeIsFinished()) return;
+        
+        Tile tile = memory.getTileFromTiles(index);
+        if (tile.isFlipped()) {
+            gui.messageLabel.setText("Tile already flipped.");
+            return;
+        }
+        
+        memory.flipTile(tile);
+        memory.updateFlips();
+        gui.getButtons().get(index).setText(String.valueOf(tile.getSymbol()));
+        
+        if (firstIndex == -1) {
+            firstIndex = index;
+        } else if (secondIndex == -1) {
+            secondIndex = index;
+            processingTurn = true;
+            evaluateMatch();
+        }
+    }
+
+    // Starts the timer in the GUI
+    private void startTimer() {
+        gui.swingTimer = new javax.swing.Timer(500, e -> {
+            gui.timeLabel.setText("Time: " + memory.getSeconds() + " / " + memory.getGameDuration());
+            gui.scoreLabel.setText("Score: " + memory.getScore());
+            if (memory.timeIsFinished()) {
+                gui.messageLabel.setText("Time's up! Game over.");
+                disableButtons();
+                gui.swingTimer.stop();
+            }
+        });
+        gui.swingTimer.start();
+    }
+
+    // Evaluates the matches in the GUI after two tiles
+    private void evaluateMatch() {
+        Tile t1 = memory.getTileFromTiles(firstIndex);
+        Tile t2 = memory.getTileFromTiles(secondIndex);
+
+        // Handles if the tiles match
+        if (t1.getSymbol() == t2.getSymbol() && !t1.isMatched() && !t2.isMatched()) {
+            gui.messageLabel.setText("Match found! (+10 Points)"); // Calls the GUI for the output
+            memory.updateMatches(); // Calls the model to update the matches and score
+            memory.positiveScore();
+            t1.setMatched(true);
+            t2.setMatched(true);
+            t1.setSeen(true);
+            t2.setSeen(true);
+            gui.getButtons().get(firstIndex).setEnabled(false);
+            gui.getButtons().get(secondIndex).setEnabled(false);
+            resetSelection();
+            
+            // Handles if user finds all the matches
+            if (memory.getMatches() == memory.getTiles().size() / 2) {
+                gui.messageLabel.setText("You found all the matches!");
+                memory.endGame();
+                disableButtons();
+                if (gui.swingTimer != null) gui.swingTimer.stop();
+                JOptionPane.showMessageDialog(gui, "Congratulations!\nFinal score: " + memory.getScore() 
+                    + "\nTime: " + memory.getSeconds() + " seconds");
+            } else {
+                processingTurn = false;
+            }
+        } else { // Handles if the tiles do not match
+            java.util.List<Tile> currentTurnTiles = Arrays.asList(t1, t2);
+
+            boolean penalty = false;
+            for (Tile t : currentTurnTiles) {
+                if (t.isSeen()) penalty = true;
+            }
+
+            if (penalty) {
+                gui.messageLabel.setText("No match. You saw this card before! (-2 Points)");
+                memory.negativeScore();
+            } else {
+                gui.messageLabel.setText("No match. Next turn.");
+            }
+
+            for (Tile t : currentTurnTiles) t.setSeen(true);
+
+            javax.swing.Timer flipBackTimer = new javax.swing.Timer(700, e -> {
+                memory.resetFlippedTiles();
+                gui.refreshBoard();
+                resetSelection();
+                processingTurn = false;
+            });
+            flipBackTimer.setRepeats(false);
+            flipBackTimer.start();
+        }
+
+        gui.scoreLabel.setText("Score: " + memory.getScore());
     }
 
     private void resetSelection() {
@@ -550,40 +441,161 @@ class GameGUI extends JFrame {
     }
 
     private void disableButtons() {
-        for (JButton btn : buttons) btn.setEnabled(false);
+        for (JButton btn : gui.getButtons()) {
+            btn.setEnabled(false);
+        }
     }
 
-private void restartGame() {
-    if (swingTimer != null && swingTimer.isRunning()) swingTimer.stop();
+    // Restarts game by resetting variables. Allows user to know by messages
+    public void restartGame() {
+        if (gui.swingTimer != null && gui.swingTimer.isRunning()) {
+            gui.swingTimer.stop();
+        }
+        processingTurn = false;
+        firstIndex = -1;
+        secondIndex = -1;
+        memory.restartGame();
+        gui.refreshBoard();
+        gui.scoreLabel.setText("Score: " + memory.getScore());
+        gui.messageLabel.setText("New game");
+        startTimer();
+    }
+    
+    // Playing method if the user selects the terminal view
+    public void play() {
+        memory.initializeTiles(6);
+        memory.startTimer();
 
-    processingTurn = false;
-    firstIndex = -1;
-    secondIndex = -1;
-    memory.restartGame();
-    refreshBoard();
-    scoreLabel.setText("Score: " + memory.getScore());
-    messageLabel.setText("New game");
-    startTime();
+        while (memory.getMatches() < memory.getTiles().size() / 2) {
+            if (memory.timeIsFinished()) {
+                output.show("Time's up! Game over.");
+                memory.endGame();
+                return;
+            }
+            
+            // Calls the terminal to display the board and messages
+            output.displayBoard(memory.getTiles());
+            output.show("Enter the tile number to flip, 'q' to quit, or 'r' to restart: ");
+            String input = userInput(); // Gets user input from the view
+            
+            // If time is up the game is cancelled
+            if (memory.timeIsFinished()) {
+                output.show("Time's up! Game over.");
+                memory.endGame();
+                return;
+            }
+
+            // Handles user input if they quit or restart
+            if (input.equalsIgnoreCase("q")) {
+                output.show("Quitting the game. Goodbye!");
+                memory.endGame();
+                memory.cancelTimer();
+                return;
+            } else if (input.equalsIgnoreCase("r")) {  
+                output.show("Restarting the game...");
+                memory.restartGame();
+                continue;
+            }
+            // Handles user errors
+            int tileIndex;
+            try {
+                tileIndex = Integer.parseInt(input);
+            } catch (NumberFormatException e) {
+                output.show("Invalid input. Please enter a tile number.");
+                continue;
+            }
+            
+            if (tileIndex < 0 || tileIndex >= memory.getTiles().size()) {
+                output.show("Invalid tile number. Please enter a valid tile number.");
+                continue;
+            }
+            // Checks a specific tile
+            Tile tile = memory.getTileFromTiles(tileIndex);
+            if (tile.isFlipped()) {
+                output.show("Tile already flipped. Try again.");
+            } else {
+                memory.flipTile(tile);
+                memory.updateFlips();
+                // If a match is found, matchesFound and playerScore increases
+                if (memory.checkForMatch(tile)) {
+                    output.show("Match found! (+10 Points)");
+                    memory.updateMatches();
+                    memory.positiveScore(); 
+                    // Loops through tiles to mark matched ones as "seen"
+                    for (Tile t : memory.getTiles()) {
+                        if (t.isFlipped()) {
+                            t.setSeen(true);
+                        }
+                    }
+                } else if (memory.getFlips() == 0) {
+                    // Check for penalties before resetting tiles
+                    // Identify the cards involved in this turn
+                    List<Tile> currentTurnTiles = new ArrayList<>();
+                    for (Tile t : memory.getTiles()) {
+                        if (t.isFlipped()) {
+                            currentTurnTiles.add(t);
+                        }
+                    }
+                    //  Check if any of these cards were seen before
+                    boolean penalty = false;
+                    for (Tile t : currentTurnTiles) {
+                        // If it's seen AND it's not the one we just flipped (unless we flipped the same one twice, which is prevented elsewhere)
+                        // Actually simplified: If it's seen, we should have remembered it.
+                        if (t.isSeen()) {
+                            penalty = true;
+                        }
+                    }
+
+                    if (penalty) {
+                        output.show("No match. You saw this card before! (-2 Points). Next turn.");
+                        memory.negativeScore();
+                    } else {
+                        output.show("No match. Out of flips. Next turn.");
+                    }
+
+                    for (Tile t : currentTurnTiles) {
+                        t.setSeen(true);
+                    }
+
+                    memory.resetFlippedTiles(); // Reset the flips remaining for the next turn
+                } else {
+                    output.show("No match. Try again.");
+                }
+            }
+        }
+        
+        // Calls the view to output the user results
+        output.show("Congratulations! You found all the matches.");
+        output.show("Your final score: " + memory.getScore());
+        output.show("Time elapsed: " + memory.getSeconds() + " seconds");
+        memory.endGame();
+        scanner.close();
+    }
+
+    public String userInput() {
+        String input = scanner.nextLine();
+        return input;
+    }
 }
 
-}
 
 public class Main {
     public static void main(String[] args) {
-        // for console
-        // MemoryGame game = new MemoryGame();
-        // game.initializeTiles(6); 
-        // GameController controller = new GameController(game);
-        // controller.play();
-
-        // for GUI
-        SwingUtilities.invokeLater(() -> {
-            MemoryGame game = new MemoryGame();
-            game.initializeTiles(6); 
-            GameGUI gui = new GameGUI(game);
-            gui.setVisible(true);
-        });
+        Scanner scan = new Scanner(System.in);
+        MemoryGame game = new MemoryGame();
+        GameController controller = new GameController(game);
+        
+        // Handles user input. They can choose the view
+        System.out.println("Select the game mode: T for terminal, G for GUI");
+        String input = scan.next();
+        
+        if (input.equalsIgnoreCase("T")) {
+            controller.play();
+        } else if (input.equalsIgnoreCase("G")) {
+            controller.playGUI();
+        } else {
+            System.out.println("Invalid input. Try again");
+        }
+        scan.close();
     }
 }
-
-
